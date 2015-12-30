@@ -1,5 +1,10 @@
 using QRupdate
-using Base.Test
+using FactCheck
 
-# write your own tests here
-@test 1 == 1
+tests = ["qraddcol",
+         "qraddrow",
+         "qrdelcol"]
+
+for t in tests
+    include("$(t).jl")
+end
