@@ -51,7 +51,7 @@ function qraddcol{T}(A::AbstractMatrix{T}, R::AbstractMatrix{T},
     anorm  = norm(a)
     anorm2 = anorm^2
     β2  = β^2
-    if beta != 0
+    if β != 0
         anorm2 = anorm2 + β2
         anorm  = sqrt(anorm2)
     end
@@ -141,7 +141,6 @@ function qrdelcol{T}(R::AbstractMatrix{T}, k::Int)
     n = size(R,2)               # Should have m=n+1
 
     for j in k:n                # Forward sweep to reduce k-th row to zeros
-        I = [j+1, k]
         G, y = givens(R[j+1,j], R[k,j], 1, 2)
         R[j+1,j] = y
         if j<n && G.s != 0
