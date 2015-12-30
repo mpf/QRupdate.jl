@@ -1,6 +1,7 @@
 # QRupdate
 
 [![Build Status](https://travis-ci.org/mpf/QRupdate.jl.svg?branch=master)](https://travis-ci.org/mpf/QRupdate.jl)
+[![codecov.io](https://codecov.io/github/mpf/QRupdate.jl/coverage.svg?branch=master)](https://codecov.io/github/mpf/QRupdate.jl?branch=master)
 
 Update the "Q-less" QR factorization of a matrix. Routines are
 provided for adding and deleting columns, adding rows, and solving the
