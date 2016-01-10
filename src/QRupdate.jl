@@ -44,8 +44,8 @@ If `A` has no columns yet, input `A = []`, `R = []`.
                  Update u using du, but keep Ake's version in comments.
     29 Dec 2015: Converted to Julia.
 """
-function qraddcol{T}(A::AbstractMatrix{T}, R::AbstractMatrix{T},
-                     a::Vector{T}, β::T = 0.0)
+function qraddcol(A::AbstractMatrix, Rin::AbstractMatrix,
+                  a::Vector, β::Real = 0.0)
 
     m, n = size(A)
     anorm  = norm(a)
@@ -60,7 +60,7 @@ function qraddcol{T}(A::AbstractMatrix{T}, R::AbstractMatrix{T},
         return reshape([anorm], 1, 1)
     end
 
-    R = UpperTriangular(R)
+    R = UpperTriangular(Rin)
     
     c      = A'*a           # = [A' β*I 0]*[a; 0; β]
     u      = R'\c
@@ -88,10 +88,8 @@ function qraddcol{T}(A::AbstractMatrix{T}, R::AbstractMatrix{T},
         end
     end
 
-    n = size(R,1)
-    R = [    R           u
+    return [ Rin         u
              zeros(1,n)  γ ]
-    return R
 end
 
 """
@@ -165,9 +163,9 @@ minimize  ||r||_2,  where  r := b - A*x
 using the corrected semi-normal equation approach described by
 Bjork (1987). Assumes that `R` is upper triangular.
 """
-function csne(R::AbstractMatrix, A::AbstractMatrix, b::Vector)
+function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
 
-    R = UpperTriangular(R)
+    R = UpperTriangular(Rin)
     q = A'*b
     x = R' \ q
 
