@@ -44,8 +44,8 @@ If `A` has no columns yet, input `A = []`, `R = []`.
                  Update u using du, but keep Ake's version in comments.
     29 Dec 2015: Converted to Julia.
 """
-function qraddcol(A::AbstractMatrix, Rin::AbstractMatrix,
-                  a::Vector, β::Real = 0.0)
+function qraddcol{T}(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
+                  a::Vector{T}, β::T = 0.0)
 
     m, n = size(A)
     anorm  = norm(a)
@@ -88,8 +88,16 @@ function qraddcol(A::AbstractMatrix, Rin::AbstractMatrix,
         end
     end
 
-    return [ Rin         u
-             zeros(1,n)  γ ]
+    # This seems to be faster than concatenation, ie:
+    # [ Rin         u
+    #   zeros(1,n)  γ ]
+    Rout = Array{T}(n+1, n+1)
+    Rout[1:n,1:n] = R
+    Rout[1:n,n+1] = u
+    Rout[n+1,n+1] = γ
+    Rout[n+1,1:n] = 0.0
+    
+    return Rout
 end
 
 """
