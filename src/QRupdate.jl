@@ -189,7 +189,7 @@ function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
     dx = R' \ q
     dx = R  \ dx
     x += dx
-
+    r = b - A*x
     return (x, r)    
 end
 
