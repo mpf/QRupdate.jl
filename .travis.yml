@@ -11,7 +11,7 @@ notifications:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("QRupdate"); Pkg.test("QRupdate"; coverage=true)'
+  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("QRupdate"); Pkg.test("QRupdate"; coverage=true)'
 
 after_success:
   - julia -e 'cd(Pkg.dir("QRupdate")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
