@@ -11,7 +11,7 @@ least-squares systems.
 
 ```JULIA
 #Enter package mode by typing ]
-add "https://github.com/mpf/QRupdate.jl.git"
+add "https://github.com/jekyllstein/QRupdate.jl"
 Pkg.test("QRupdate")
 ```
 
