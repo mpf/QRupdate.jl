@@ -26,4 +26,4 @@ build_script:
   - C:\julia\bin\julia -e "%JL_BUILD_SCRIPT%"
 
 test_script:
-  - C:\projects\julia\bin\julia --project -e "using Pkg; Pkg.test()"
+  - C:\projects\julia\bin\julia -e "using Pkg; Pkg.test("QRupdate")"
