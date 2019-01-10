@@ -11,7 +11,7 @@ notifications:
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.build(); Pkg.test(; coverage=true)'
+  - julia -e 'using Pkg; Pkg.activate("."); Pkg.instantiate(); Pkg.build(); Pkg.test(; coverage=true)'
 
 after_success:
   # push coverage to Codecov
