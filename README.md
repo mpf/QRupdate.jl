@@ -25,8 +25,8 @@ A = randn(m,0)
 R = Array{Float64}(undef, 0,0)
 for i in 1:n
     a = randn(m)
-    R = qraddcol(A, R, a)
-    A = [A a]
+    global R = qraddcol(A, R, a)
+    global A = [A a]
 end
 ```
 Solve a least-squares problem using R.
