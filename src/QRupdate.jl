@@ -1,7 +1,7 @@
 module QRupdate
 
 using LinearAlgebra
-export qraddcol, qraddrow, qrdelcol, csne
+export qraddcol, qraddcol!, qraddrow, qrdelcol, csne, csne!
 
 """
 Add a column to a QR factorization without using Q.
@@ -73,17 +73,17 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
         γ = sqrt(d2)
     else
         z = R\u          # First approximate solution to min ||Az - a||
-        r = a - A*z
-        c = A'*r
+        r = a .- A*z
+        c .= A'*r
         if β != 0
-            c = c - β2*z
+            c = c .- β2*z
         end
         du = R'\c
         dz = R\du
-        z  += dz          # Refine z
+        z  .+= dz          # Refine z
       # u  = R*z          # Original:     Bjork's version.
-        u  += du          # Modification: Refine u
-        r  = a - A*z
+        u  .+= du          # Modification: Refine u
+        r  .= a .- A*z
         γ = norm(r)       # Safe computation (we know gamma >= 0).
         if β != 0
             γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
@@ -94,12 +94,68 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
     # [ Rin         u
     #   zeros(1,n)  γ ]
     Rout = Array{T}(undef, n+1, n+1)
-    Rout[1:n,1:n] = R
-    Rout[1:n,n+1] = u
+    view(Rout, 1:n, 1:n) .= R
+    view(Rout, 1:n, n+1) .= u
     Rout[n+1,n+1] = γ
-    Rout[n+1,1:n] .= 0.0
+    view(Rout, n+1, 1:n) .= 0.0
     
     return Rout
+end
+
+function qraddcol!(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
+                  a::Vector{T}, Rout::AbstractMatrix{T}, r::Vector{T}, β::T = zero(T)) where T
+
+    m, n = size(A)
+    anorm  = norm(a)
+    anorm2 = anorm^2
+    β2  = β^2
+    if β != 0
+        anorm2 = anorm2 + β2
+        anorm  = sqrt(anorm2)
+    end
+    
+    if n == 0
+        return Rout[1, 1] = anorm
+    end
+
+    R = UpperTriangular(Rin)
+    
+    c      = A'*a           # = [A' β*I 0]*[a; 0; β]
+    u      = R'\c
+    unorm2 = norm(u)^2
+    d2     = anorm2 - unorm2
+    
+    if d2 > anorm2 #DISABLE 0.01*anorm2     # Cheap case: γ is not too small
+        γ = sqrt(d2)
+    else
+        z = R\u          # First approximate solution to min ||Az - a||
+        r .= a .- A*z
+        c .= A'*r
+        if β != 0
+            c .= c .- β2*z
+        end
+        du = R'\c
+        dz = R\du
+        z  .+= dz          # Refine z
+      # u  = R*z          # Original:     Bjork's version.
+        u  .+= du          # Modification: Refine u
+        r  .= a .- A*z
+        γ = norm(r)       # Safe computation (we know gamma >= 0).
+        if β != 0
+            γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
+        end
+    end
+
+    # This seems to be faster than concatenation, ie:
+    # [ Rin         u
+    #   zeros(1,n)  γ ]
+    # Rout = Array{T}(undef, n+1, n+1)
+    view(Rout, 1:n, 1:n) .= R
+    view(Rout, 1:n, n+1) .= u
+    Rout[n+1,n+1] = γ
+    view(Rout, n+1, 1:n) .= 0.0
+
+    # return Rout
 end
 
 """
@@ -179,20 +235,42 @@ function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
     q = A'*b
     x = R' \ q
 
-    bnorm2 = sum(a -> abs(a)^2, b) #sumabs2(b)
-    xnorm2 = sum(a -> abs(a)^2, x) #sumabs2(x)
+    bnorm2 = sum(abs2, b) #sumabs2(b)
+    xnorm2 = sum(abs2, x) #sumabs2(x)
     d2 = bnorm2 - xnorm2
     
-    x = R \ x
+    x .= R \ x
 
     # Apply one step of iterative refinement.
-    r = b - A*x
-    q = A'*r
+    r = b .- A*x
+    q .= A'*r
     dx = R' \ q
-    dx = R  \ dx
-    x += dx
-    r = b - A*x
+    dx .= R  \ dx
+    x .+= dx
+    r .= b .- A*x
     return (x, r)    
+end
+
+function csne!(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector, r::Vector)
+
+    R = UpperTriangular(Rin)
+    q = A'*b
+    x = R' \ q
+
+    bnorm2 = sum(abs2, b) #sumabs2(b)
+    xnorm2 = sum(abs2, x) #sumabs2(x)
+    d2 = bnorm2 - xnorm2
+    
+    x .= R \ x
+
+    # Apply one step of iterative refinement.
+    r .= b .- A*x
+    q .= A'*r
+    dx = R' \ q
+    dx .= R  \ dx
+    x .+= dx
+    r .= b .- A*x
+    return x    
 end
 
 
