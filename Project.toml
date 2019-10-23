@@ -1,0 +1,14 @@
+name = "QRupdate"
+uuid = "c465b395-4abe-5789-807f-2446d20775eb"
+
+[deps]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+
+[extras]
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[targets]
+test = ["Random"]
+
+[compat]
+julia = "0.7,1"

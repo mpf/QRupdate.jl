@@ -1,7 +1,7 @@
 # QRupdate
 
-[![Build Status](https://travis-ci.org/mpf/QRupdate.jl.svg?branch=master)](https://travis-ci.org/mpf/QRupdate.jl)
-[![codecov.io](https://codecov.io/github/mpf/QRupdate.jl/coverage.svg?branch=master)](https://codecov.io/github/mpf/QRupdate.jl?branch=master)
+[![Build Status](https://travis-ci.org/jekyllstein/QRupdate.jl.svg?branch=master)](https://travis-ci.org/jekyllstein/QRupdate.jl)
+[![codecov.io](https://codecov.io/github/jekyllstein/QRupdate.jl/coverage.svg?branch=master)](https://codecov.io/github/jekyllstein/QRupdate.jl?branch=master)
 
 Update the "Q-less" QR factorization of a matrix. Routines are
 provided for adding and deleting columns, adding rows, and solving the
@@ -10,7 +10,8 @@ least-squares systems.
 ## Installing
 
 ```JULIA
-Pkg.clone("https://github.com/mpf/QRupdate.jl.git")
+#Enter package mode by typing ]
+add "https://github.com/jekyllstein/QRupdate.jl"
 Pkg.test("QRupdate")
 ```
 
@@ -21,11 +22,11 @@ Build the "Q-less" QR factorization of A one column at a time.
 ```JULIA
 m, n = 100, 50
 A = randn(m,0)
-R = Array{Float64}(0,0)
+R = Array{Float64}(undef, 0,0)
 for i in 1:n
     a = randn(m)
-    R = qraddcol(A, R, a)
-    A = [A a]
+    global R = qraddcol(A, R, a)
+    global A = [A a]
 end
 ```
 Solve a least-squares problem using R.

@@ -4,14 +4,17 @@ os:
   - linux
   - osx
 julia:
-  - release
+  - 0.7
+  - 1.0
   - nightly
 notifications:
   email: false
 
 script:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("QRupdate"); Pkg.test("QRupdate"; coverage=true)'
+  - julia -e 'using Pkg; Pkg.activate("."); Pkg.instantiate(); Pkg.build(); Pkg.test(; coverage=true)'
 
 after_success:
-  - julia -e 'cd(Pkg.dir("QRupdate")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  # push coverage to Codecov
+  - julia -e 'using Pkg; cd(Pkg.dir("QRupdate")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+
