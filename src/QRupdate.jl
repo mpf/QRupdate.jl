@@ -1,5 +1,7 @@
 module QRupdate
 
+using LinearAlgebra
+
 export qraddcol, qraddrow, qrdelcol, csne
 
 """
@@ -44,8 +46,8 @@ If `A` has no columns yet, input `A = []`, `R = []`.
                  Update u using du, but keep Ake's version in comments.
     29 Dec 2015: Converted to Julia.
 """
-function qraddcol{T}(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
-                  a::Vector{T}, β::T = 0.0)
+function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
+                  a::Vector{T}, β::T = 0.0) where {T}
 
     m, n = size(A)
     anorm  = norm(a)
@@ -55,18 +57,18 @@ function qraddcol{T}(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
         anorm2 = anorm2 + β2
         anorm  = sqrt(anorm2)
     end
-    
+
     if n == 0
         return reshape([anorm], 1, 1)
     end
 
     R = UpperTriangular(Rin)
-    
+
     c      = A'*a           # = [A' β*I 0]*[a; 0; β]
     u      = R'\c
     unorm2 = norm(u)^2
     d2     = anorm2 - unorm2
-    
+
     if d2 > anorm2 #DISABLE 0.01*anorm2     # Cheap case: γ is not too small
         γ = sqrt(d2)
     else
@@ -91,24 +93,25 @@ function qraddcol{T}(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
     # This seems to be faster than concatenation, ie:
     # [ Rin         u
     #   zeros(1,n)  γ ]
-    Rout = Array{T}(n+1, n+1)
-    Rout[1:n,1:n] = R
-    Rout[1:n,n+1] = u
+    Rout = zeros(T, n+1, n+1)
+    Rout[1:n,1:n] .= R
+    Rout[1:n,n+1] .= u
     Rout[n+1,n+1] = γ
-    Rout[n+1,1:n] = 0.0
-    
+    # Rout[n+1,1:n] .= 0.0
+
+
     return Rout
 end
 
 """
 Add a row and update a Q-less QR factorization.
-    
+
 qraddrow!(R, a) returns the triangular part of a QR factorization of
 [A; a], where A = QR for some Q.  The argument 'a' should be a row
 vector.
 """
-function qraddrow{T}(R::AbstractMatrix{T}, a::AbstractMatrix{T})
-    
+function qraddrow(R::AbstractMatrix{T}, a::AbstractMatrix{T}) where {T}
+
     n = size(R,1)
     @inbounds @simd for k in 1:n
         G, r = givens( R[k,k], a[k], 1, 2 )
@@ -140,7 +143,7 @@ triangle.
     18 Jun 2007: R is now the exact size on entry and exit.
     30 Dec 2015: Translate to Julia.
 """
-function qrdelcol{T}(R::AbstractMatrix{T}, k::Int)
+function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
 
     m = size(R,1)
     R = R[:,1:m .!= k]          # Delete the k-th column
@@ -166,12 +169,12 @@ Solve the corrected semi-normal equations `R'Rx=A'b`.
 
     x, r = csne(R, A, b) solves the least-squares problem
 
-minimize  ||r||_2,  where  r := b - A*x 
+minimize  ||r||_2,  where  r := b - A*x
 
 using the corrected semi-normal equation approach described by
 Bjork (1987). Assumes that `R` is upper triangular.
 """
-function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
+function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where {T}
 
     R = UpperTriangular(Rin)
     q = A'*b
@@ -180,7 +183,7 @@ function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
     bnorm2 = sumabs2(b)
     xnorm2 = sumabs2(x)
     d2 = bnorm2 - xnorm2
-    
+
     x = R \ x
 
     # Apply one step of iterative refinement.
@@ -190,7 +193,7 @@ function csne(Rin::AbstractMatrix, A::AbstractMatrix, b::Vector)
     dx = R  \ dx
     x += dx
     r = b - A*x
-    return (x, r)    
+    return (x, r)
 end
 
 
