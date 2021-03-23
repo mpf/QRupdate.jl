@@ -1,5 +1,6 @@
 using QRupdate
-using FactCheck
+using Test
+using LinearAlgebra
 
 tests = ["qraddcol",
          "qraddrow",
