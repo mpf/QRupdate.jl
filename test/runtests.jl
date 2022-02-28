@@ -1,10 +1,60 @@
 using QRupdate
-using FactCheck
+using Test
+using LinearAlgebra
 
-tests = ["qraddcol",
-         "qraddrow",
-         "qrdelcol"]
+@testset "qraddcol with β = 0" begin
+    m = 100
+    A = randn(m, 0)
+    b = randn(m)
+    R = zeros(0, 0)
+    
+    for i in 1:m
+        a = randn(m)
+        R = qraddcol(A, R, a)
+        A = [A a]
+        x, r = csne(R, A, b)
+        @test norm(A'r, Inf) < 1e-5 
+        @test norm( R'*R - A'*A ) < 1e-5
+    end
+end
 
-for t in tests
-    include("$(t).jl")
+@testset "qraddcol with β > 0" begin
+    m = 100
+    A = randn(m, 0)
+    b = randn(m)
+    R = zeros(0, 0)
+    β = 0.1
+    for i in 1:m
+        a = randn(m)
+        R = qraddcol(A, R, a, β)
+        A = [A a]
+        # x, r = csne(R, A, b) # TODO: doesn't yet work with β > 0
+        # @test norm(A'r, Inf) < 1e-5 
+        @test norm( R'*R - A'*A - β^2*I ) < 1e-5
+    end
+end
+
+@testset "qraddrow" begin
+    m, n = 3, 3
+    A = randn(m,m)
+    Q, R = qr(A)
+    for i in 1:100
+        a = randn(m)'
+        A = [A; a]
+        R = qraddrow(R, a)
+        @test norm( R'R - A'*A ) < 1e-5
+    end
+    
+end
+
+@testset "qrdelcol" begin
+    m = 100
+    A = randn(m,m)
+    Q, R = qr(A)
+    for i in 100:-1:1
+        k = rand(1:i)
+        A = A[:,1:i .!= k]
+        R = qrdelcol(R, k)
+        @test norm( R'*R - A'*A ) < 1e-5
+    end
 end

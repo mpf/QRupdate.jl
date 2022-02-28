@@ -1,6 +1,6 @@
 The QRupdate.jl package is licensed under the MIT "Expat" License:
 
-> Copyright (c) 2015: Michael Friedlander.
+> Copyright (c) 2015: Michael P. Friedlander and Michael A. Saunders.
 >
 > Permission is hereby granted, free of charge, to any person obtaining
 > a copy of this software and associated documentation files (the
