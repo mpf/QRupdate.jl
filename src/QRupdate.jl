@@ -13,42 +13,23 @@ triangular matrix such that `R'*R = A'*A`.
 
 `R = qraddcol(A,R,v,β)` is similar to the above, except that the
 routine updates the QR factorization of
-
-[A; β I],   and   R'*R = (A'*A + β^2*I) = R'*R.
+```
+[A; β I],   and   R'*R = (A'*A + β^2*I).
+```
 
 `A` should have fewer columns than rows.  `A` and `v` may be sparse or
 dense.  On exit, `R` is the (n+1)-by-(n+1) factor corresponding to
 
+```
   Anew = [A        V ],    Rnew = [R   u  ],   Rnew'Rnew = Anew'Anew.
          [beta*I     ]            [  gamma]
          [       beta]
+```
 
 The new column `v` is assumed to be nonzero.
 If `A` has no columns yet, input `A = []`, `R = []`.
-
-    15 Jun 2007: First version of QRaddcol.m (without beta).
-                 Michael Friedlander (mpf@cs.ubc.ca) and
-                 Michael Saunders (saunders@stanford.edu)
-                 Where necessary, Ake Bjorck's CSNE
-                 (Corrected Semi-Normal Equations) method
-                 is used to improve the accuracy of u and gamma.
-                 See p143 of Ake Bjork's Least Squares book.
-    18 Jun 2007: R is now the exact size on entry and exit.
-    19 Oct 2007: Sparse A, a makes c and u sparse.
-                 Force them to be dense.
-                 For dense R we probably should use linsolve,
-                 which requires c and u to be dense anyway.
-    04 Aug 2008: QRaddcol2 updates u using du, rather than
-                 u = R*z as in Ake's book.
-                 We guess that it might be slightly more accurate,
-                 but it's hard to tell.  No R*z makes it a little cheaper.
-    03 Sep 2008: Generalize A to be [A; beta*I] for some scalar beta.
-                 Update u using du, but keep Ake's version in comments.
-    29 Dec 2015: Converted to Julia.
 """
-# function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T},
-#                   a::Vector{T}, β::T = 0.0) where {T}
-function qraddcol(A, Rin,a, β::Float64 = 0.0)
+function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β::T = zero(T)) where {T}
 
     m, n = size(A)
     anorm  = norm(a)
@@ -86,7 +67,7 @@ function qraddcol(A, Rin,a, β::Float64 = 0.0)
         u  += du          # Modification: Refine u
         r  = a - A*z
         γ = norm(r)       # Safe computation (we know gamma >= 0).
-        if β != 0
+        if !iszero(β)
             γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
         end
     end
@@ -94,7 +75,7 @@ function qraddcol(A, Rin,a, β::Float64 = 0.0)
     # This seems to be faster than concatenation, ie:
     # [ Rin         u
     #   zeros(1,n)  γ ]
-    Rout = zeros(n+1, n+1)
+    Rout = zeros(T, n+1, n+1)
     Rout[1:n,1:n] .= R
     Rout[1:n,n+1] .= u
     Rout[n+1,n+1] = γ
@@ -107,8 +88,7 @@ end
 """
 Add a row and update a Q-less QR factorization.
 
-qraddrow!(R, a) returns the triangular part of a QR factorization of
-[A; a], where A = QR for some Q.  The argument 'a' should be a row
+`qraddrow!(R, a)` returns the triangular part of a QR factorization of `[A; a]`, where `A = QR` for some `Q`.  The argument `a` should be a row
 vector.
 """
 function qraddrow(R::AbstractMatrix{T}, a::AbstractMatrix{T}) where {T}
@@ -166,30 +146,29 @@ function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
 end
 
 """
-Solve the corrected semi-normal equations `R'Rx=A'b`.
+    x, r = csne(R, A, b)
 
-    x, r = csne(R, A, b) solves the least-squares problem
+solves the least-squares problem
 
-minimize  ||r||_2,  where  r := b - A*x
+    minimize  ||r||_2,  r := b - A*x
 
-using the corrected semi-normal equation approach described by
-Bjork (1987). Assumes that `R` is upper triangular.
+using the corrected semi-normal equation approach described by Bjork (1987). Assumes that `R` is upper triangular.
 """
 function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where {T}
 
     R = UpperTriangular(Rin)
-    q = A'*b
+    q = A'b
     x = R' \ q
 
-    bnorm2 = sumabs2(b)
-    xnorm2 = sumabs2(x)
+    bnorm2 = sum(abs2, b)
+    xnorm2 = sum(abs2, x)
     d2 = bnorm2 - xnorm2
 
     x = R \ x
 
     # Apply one step of iterative refinement.
     r = b - A*x
-    q = A'*r
+    q = A'r
     dx = R' \ q
     dx = R  \ dx
     x += dx
