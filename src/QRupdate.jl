@@ -46,7 +46,7 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
 
     R = UpperTriangular(Rin)
 
-    c      = A'*a           # = [A' β*I 0]*[a; 0; β]
+    c      = A'a           # = [A' β*I 0]*[a; 0; β]
     u      = R'\c
     unorm2 = norm(u)^2
     d2     = anorm2 - unorm2
@@ -56,7 +56,7 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
     else
         z = R\u          # First approximate solution to min ||Az - a||
         r = a - A*z
-        c = A'*r
+        c = A'r
         if β != 0
             c = c - β2*z
         end
@@ -79,8 +79,6 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
     Rout[1:n,1:n] .= R
     Rout[1:n,n+1] .= u
     Rout[n+1,n+1] = γ
-    # Rout[n+1,1:n] .= 0.0
-
 
     return Rout
 end
