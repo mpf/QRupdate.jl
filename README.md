@@ -1,7 +1,6 @@
 # QRupdate
 
-[![Build Status](https://travis-ci.org/mpf/QRupdate.jl.svg?branch=master)](https://travis-ci.org/mpf/QRupdate.jl)
-[![codecov.io](https://codecov.io/github/mpf/QRupdate.jl/coverage.svg?branch=master)](https://codecov.io/github/mpf/QRupdate.jl?branch=master)
+![Test Status](https://github.com/mpf/QRupdate.jl/actions/workflows/Test.yml/badge.svg)
 
 Update the "Q-less" QR factorization of a matrix. Routines are
 provided for adding and deleting columns, adding rows, and solving
@@ -10,8 +9,7 @@ associated linear least-squares problems.
 ## Installing
 
 ```julia
-Pkg.clone("https://github.com/mpf/QRupdate.jl.git")
-Pkg.test("QRupdate")
+Pkg.add(url="https://github.com/mpf/QRupdate.jl")
 ```
 
 ## Examples
