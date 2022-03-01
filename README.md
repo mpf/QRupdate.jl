@@ -4,8 +4,8 @@
 [![codecov.io](https://codecov.io/github/mpf/QRupdate.jl/coverage.svg?branch=master)](https://codecov.io/github/mpf/QRupdate.jl?branch=master)
 
 Update the "Q-less" QR factorization of a matrix. Routines are
-provided for adding and deleting columns, adding rows, and solving the
-least-squares systems.
+provided for adding and deleting columns, adding rows, and solving
+associated linear least-squares problems.
 
 ## Installing
 
