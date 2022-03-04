@@ -12,7 +12,8 @@ The least-squares solver uses Björck's corrected semi-normal equation (CSNE) ap
 ## Installing
 
 ```julia
-Pkg.add(url="https://github.com/mpf/QRupdate.jl")
+import Pkg
+Pkg.add("QRupdate")
 ```
 
 ## Examples
