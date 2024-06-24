@@ -58,3 +58,13 @@ end
         @test norm( R'*R - A'*A ) < 1e-5
     end
 end
+
+@testset "qrdelcol!" begin
+    m = 100
+    A = randn(m,m)
+    Q, R = qr(A)
+    R2 = qrdelcol(R, 10)
+    qrdelcol!(R, 10)
+    @test norm(R) - norm(R2) < 1e-14
+end
+

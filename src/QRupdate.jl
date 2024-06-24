@@ -2,7 +2,7 @@ module QRupdate
 
 using LinearAlgebra
 
-export qraddcol, qraddrow, qrdelcol, csne
+export qraddcol, qraddrow, qrdelcol, qrdelcol!, csne
 
 """
 Add a column to a QR factorization without using Q.
@@ -142,6 +142,46 @@ function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
     R = R[1:m .!= k, :]         # Delete the k-th row
     return R
 end
+
+"""
+This function is identical to the previous one, but instead leaves R
+with a column of zeros. This is useful to avoid copying the matrix. 
+"""
+function qrdelcol!(R::AbstractMatrix{T}, k::Int) where {T}
+
+    m = size(R,1)
+    n = size(R,2)               # Should have m=n+1
+    
+    # Shift columns. This is apparently faster than copying views.
+    for j in (k+1):n, i in 1:m
+        @inbounds R[i,j-1] = R[i, j]
+    end
+    for i in 1:m
+        @inbounds R[i,n] = 0.0
+    end
+
+
+    for j in k:(n-1)                # Forward sweep to reduce k-th row to zeros
+        G, y = givens(R[j+1,j], R[k,j], 1, 2)
+        R[j+1,j] = y
+        if j<n && G.s != 0
+            @inbounds @simd for i in j+1:n
+                tmp = G.c*R[j+1,i] + G.s*R[k,i]
+                R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
+                R[j+1,i] = tmp
+            end
+        end
+    end
+
+    # Shift k-th row. We skipped the removed column.
+    for j in k:(n-1)
+        for i in k:(j+1)
+            @inbounds R[i,j] = R[i+1, j]
+        end
+        R[j+1,j] = 0
+    end
+end
+
 
 """
     x, r = csne(R, A, b)
