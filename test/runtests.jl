@@ -62,13 +62,14 @@ end
 @testset "qrdelcol!" begin
     m = 100
     A = randn(m,m)
+    Ain = copy(A)
     Q, R = qr(A)
     Qin, Rin = qr(A)
     for i in 100:-1:1
         k = rand(1:i)
         A = A[:,1:i .!= k]
         R = qrdelcol(R, k)
-        qrdelcol!(Rin, k)
+        qrdelcol!(Ain, Rin, k)
         @test norm(R) - norm(Rin) < 1e-14
     end
 end

@@ -257,17 +257,19 @@ end
 This function is identical to the previous one, but instead leaves R
 with a column of zeros. This is useful to avoid copying the matrix. 
 """
-function qrdelcol!(R::AbstractMatrix{T}, k::Int) where {T}
+function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
 
-    m = size(R,1)
-    n = size(R,2)               # Should have m=n+1
+    m = size(A,1)
+    n = size(A,2)               # Should have m=n+1
     
     # Shift columns. This is apparently faster than copying views.
     for j in (k+1):n, i in 1:m
         @inbounds R[i,j-1] = R[i, j]
+        @inbounds A[i,j-1] = A[i, j]
     end
     for i in 1:m
         @inbounds R[i,n] = 0.0
+        @inbounds A[i,n] = 0.0
     end
 
 
