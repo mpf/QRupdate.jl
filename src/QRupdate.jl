@@ -2,7 +2,41 @@ module QRupdate
 
 using LinearAlgebra
 
-export qraddcol, qraddrow, qrdelcol, qrdelcol!, csne
+export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne
+
+"""
+Auxiliary function used to solve fully allocated but incomplete R matrices.
+See documentation of qraddcol! . 
+"""
+function solveR!(R::Matrix, b::Vector, sol::Vector, realSize::Int64)
+    # Note: R is upper triangular
+    @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
+    for i in (realSize-1):-1:1
+        @inbounds sol[i] = b[i]
+        for j in realSize:-1:(i+1)
+            @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
+        end
+        @inbounds sol[i] = sol[i] / R[i,i]
+    end
+end
+
+"""
+Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
+See documentation of qraddcol! . 
+"""
+function solveRT!(R::Matrix, b::Vector, sol::Vector, realSize::Int64)
+    # Note: R is upper triangular
+    @inbounds sol[1] = b[1] / R[1, 1]
+    for i in 2:realSize
+        @inbounds sol[i] = b[i]
+        for j in 1:(u)
+            @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
+        end
+        @inbounds sol[i] = sol[i] / R[i,i]
+    end
+end
+
+
 
 """
 Add a column to a QR factorization without using Q.
@@ -81,6 +115,81 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
     Rout[n+1,n+1] = γ
 
     return Rout
+end
+
+""" 
+This function is identical to the previous one, but it does in-place calculations on R. It requires 
+knowing which is the last and new column of A. The logic is that 'A' is allocated at the beginning 
+of an iterative procedure, and thus does not require further allocations:
+
+It 0      -->    It 1       -->   It 2  
+A = [0  0  0]    A = [a1  0  0]   A = [a1 a2 0]
+
+and so on. This yields that R is
+
+It 0      -->   It 1        -->   It 2
+R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
+     0  0  0           0  0  0           0  r22  0
+     0  0  0]          0  0  0]          0    0  0]
+"""
+function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::Int64, β::T = zero(T)) where {T}
+
+    m, n = size(A)
+    anorm  = norm(a)
+    anorm2 = anorm^2
+    β2  = β^2
+    if β != 0
+        anorm2 = anorm2 + β2
+        anorm  = sqrt(anorm2)
+    end
+
+    if n == 0
+        #return reshape([anorm], 1, 1)
+        R[1,1] = anorm
+    end
+
+    c = zeros(n)
+    u = zeros(n)
+    du = zeros(n)
+    mul!(c, A', a) #c = A'a 
+    solveRT!(R, c, u, N) #u = R'\c
+    unorm2 = norm(u)^2
+    d2     = anorm2 - unorm2
+
+    z = zeros(n)
+    dz = zeros(n)
+    r = zeros(m)
+
+    if d2 > anorm2 #DISABLE 0.01*anorm2     # Cheap case: γ is not too small
+        γ = sqrt(d2)
+    else
+        solveR!(R, u, z, N) #z = R\u          # First approximate solution to min ||Az - a||
+        #r = a - A*z
+        mul!(r, A, z) # r = Az
+        axpby!(1.0, a, -1, r)
+        mul!(c, A', r) #c = A'r
+        if β != 0
+            axpy!(-β2, z, c) #c = c - β2*z
+        end
+        solveRT!(R, c, du, N) #du = R'\c
+        solveR!(R, du, dz, N) #dz = R\du
+        axpy!(1, dz, z) #z  += dz          # Refine z
+      # u  = R*z          # Original:     Bjork's version.
+        axpy!(1, du, u) #u  += du          # Modification: Refine u
+        #r  = a - A*z
+        mul!(r, A, z)
+        axpby!(1, a, -1, r)
+        γ = norm(r)       # Safe computation (we know gamma >= 0).
+        if !iszero(β)
+            γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
+        end
+    end
+
+    # This seems to be faster than concatenation, ie:
+    # [ Rin         u
+    #   zeros(1,n)  γ ]
+    R[:,N+1] .= u
+    R[N+1,N+1] = γ
 end
 
 """

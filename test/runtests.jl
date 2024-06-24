@@ -68,3 +68,26 @@ end
     @test norm(R) - norm(R2) < 1e-14
 end
 
+
+@testset "qraddcol!" begin
+    m = 100
+    A = randn(m, 0)
+    b = randn(m)
+    R = zeros(0, 0)
+    
+    # Do two steps
+    a1 = randn(m)
+    R = qraddcol(A, R, a1)
+    A = [A a1]
+    a2 = randn(m)
+    R = qraddcol(A, R, a2)
+    A = [A a2]
+
+    # Now compute two steps of inplace
+    Rin = zeros(2,2)
+    Ain = zeros(m, 2)
+    qraddcol!(Ain, Rin, a1, 0)
+    qraddcol!(Ain, Rin, a2, 1)
+    @test norm(R) - norm(Rin) < 1e-10
+end
+
