@@ -29,7 +29,7 @@ function solveRT!(R::Matrix, b::Vector, sol::Vector, realSize::Int64)
     @inbounds sol[1] = b[1] / R[1, 1]
     for i in 2:realSize
         @inbounds sol[i] = b[i]
-        for j in 1:(u)
+        for j in 1:(i-1)
             @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
         end
         @inbounds sol[i] = sol[i] / R[i,i]
@@ -143,9 +143,10 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
         anorm  = sqrt(anorm2)
     end
 
-    if n == 0
+    if N == 0
         #return reshape([anorm], 1, 1)
         R[1,1] = anorm
+        return
     end
 
     c = zeros(n)
@@ -284,7 +285,7 @@ function qrdelcol!(R::AbstractMatrix{T}, k::Int) where {T}
 
     # Shift k-th row. We skipped the removed column.
     for j in k:(n-1)
-        for i in k:(j+1)
+        for i in k:j
             @inbounds R[i,j] = R[i+1, j]
         end
         R[j+1,j] = 0
