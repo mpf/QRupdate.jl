@@ -2,7 +2,41 @@ module QRupdate
 
 using LinearAlgebra
 
-export qraddcol, qraddrow, qrdelcol, csne
+export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne
+
+"""
+Auxiliary function used to solve fully allocated but incomplete R matrices.
+See documentation of qraddcol! . 
+"""
+function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
+    # Note: R is upper triangular
+    @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
+    for i in (realSize-1):-1:1
+        @inbounds sol[i] = b[i]
+        for j in realSize:-1:(i+1)
+            @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
+        end
+        @inbounds sol[i] = sol[i] / R[i,i]
+    end
+end
+
+"""
+Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
+See documentation of qraddcol! . 
+"""
+function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
+    # Note: R is upper triangular
+    @inbounds sol[1] = b[1] / R[1, 1]
+    for i in 2:realSize
+        @inbounds sol[i] = b[i]
+        for j in 1:(i-1)
+            @inbounds sol[i] = sol[i] - R[j,i] * sol[j]
+        end
+        @inbounds sol[i] = sol[i] / R[i,i]
+    end
+end
+
+
 
 """
 Add a column to a QR factorization without using Q.
@@ -83,6 +117,111 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
     return Rout
 end
 
+""" 
+This function is identical to the previous one, but it does in-place calculations on R. It requires 
+knowing which is the last and new column of A. The logic is that 'A' is allocated at the beginning 
+of an iterative procedure, and thus does not require further allocations:
+
+It 0      -->    It 1       -->   It 2  
+A = [0  0  0]    A = [a1  0  0]   A = [a1 a2 0]
+
+and so on. This yields that R is
+
+It 0      -->   It 1        -->   It 2
+R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
+     0  0  0           0  0  0           0  r22  0
+     0  0  0]          0  0  0]          0    0  0]
+"""
+function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::Int64, β::T = zero(T)) where {T}
+
+    m, n = size(A)
+
+    # First add vector to A
+    for i in 1:m
+        @inbounds A[i,N+1] = a[i]
+    end
+
+    anorm  = norm(a)
+    anorm2 = anorm^2
+    β2  = β^2
+    if β != 0
+        anorm2 = anorm2 + β2
+        anorm  = sqrt(anorm2)
+    end
+
+    if N == 0
+        #return reshape([anorm], 1, 1)
+        R[1,1] = anorm
+        return
+    end
+
+    c = zeros(N)
+    u = zeros(N)
+    du = zeros(N)
+    
+    for i in 1:N #c = A'a 
+        for j in 1:m
+            @inbounds c[i] += A[j,i] * a[j]
+        end
+    end
+    solveRT!(R, c, u, N) #u = R'\c
+    unorm2 = norm(u)^2
+    d2     = anorm2 - unorm2
+
+    z = zeros(N)
+    dz = zeros(N)
+    r = zeros(m)
+
+    if d2 > anorm2
+        γ = sqrt(d2)
+    else
+        solveR!(R, u, z, N) #z = R\u  
+        #mul!(r, A, z, -1, 1) #r = a - A*z
+        for i in 1:m
+            @inbounds r[i] = a[i]
+            for j in 1:N
+                @inbounds r[i] -= A[i,j] * z[j]
+            end
+        end
+        #mul!(c, A', r) #c = A'r
+        c[:] .= 0.0
+        for i in 1:N 
+            for j in 1:m
+                @inbounds c[i] += A[j,i] * r[j]
+            end
+        end
+
+        if β != 0
+            axpy!(-β2, z, c) #c = c - β2*z
+        end
+        solveRT!(R, c, du, N) #du = R'\c
+        solveR!(R, du, dz, N) #dz = R\du
+        axpy!(1, dz, z) #z  += dz          # Refine z
+      # u  = R*z          # Original:     Bjork's version.
+        axpy!(1, du, u) #u  += du          # Modification: Refine u
+        #r = a - A*z
+        for i in 1:m
+            @inbounds r[i] = a[i]
+            for j in 1:N
+                @inbounds r[i] -= A[i,j] * z[j]
+            end
+        end
+
+        γ = norm(r)       # Safe computation (we know gamma >= 0).
+        if !iszero(β)
+            γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
+        end
+    end
+
+    # This seems to be faster than concatenation, ie:
+    # [ Rin         u
+    #   zeros(1,n)  γ ]
+    for i in 1:N
+        @inbounds R[i, N+1] = u[i]
+    end
+    R[N+1,N+1] = γ
+end
+
 """
 Add a row and update a Q-less QR factorization.
 
@@ -92,7 +231,7 @@ vector.
 function qraddrow(R::AbstractMatrix{T}, a::AbstractMatrix{T}) where {T}
 
     n = size(R,1)
-    @inbounds @simd for k in 1:n
+    @inbounds for k in 1:n
         G, r = givens( R[k,k], a[k], 1, 2 )
         B = G * [ reshape(R[k,k:n], 1, n-k+1)
                   reshape(a[:,k:n], 1, n-k+1) ]
@@ -132,7 +271,7 @@ function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
         G, y = givens(R[j+1,j], R[k,j], 1, 2)
         R[j+1,j] = y
         if j<n && G.s != 0
-            @inbounds @simd for i in j+1:n
+            @inbounds for i in j+1:n
                 tmp = G.c*R[j+1,i] + G.s*R[k,i]
                 R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
                 R[j+1,i] = tmp
@@ -142,6 +281,48 @@ function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
     R = R[1:m .!= k, :]         # Delete the k-th row
     return R
 end
+
+"""
+This function is identical to the previous one, but instead leaves R
+with a column of zeros. This is useful to avoid copying the matrix. 
+"""
+function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
+
+    m = size(A,1)
+    n = size(A,2)               # Should have m=n+1
+    
+    # Shift columns. This is apparently faster than copying views.
+    for j in (k+1):n, i in 1:m
+        @inbounds R[i,j-1] = R[i, j]
+        @inbounds A[i,j-1] = A[i, j]
+    end
+    for i in 1:m
+        @inbounds R[i,n] = 0.0
+        @inbounds A[i,n] = 0.0
+    end
+
+
+    for j in k:(n-1)                # Forward sweep to reduce k-th row to zeros
+        @inbounds G, y = givens(R[j+1,j], R[k,j], 1, 2)
+        @inbounds R[j+1,j] = y
+        if j<n && G.s != 0
+            for i in j+1:n
+                @inbounds tmp = G.c*R[j+1,i] + G.s*R[k,i]
+                @inbounds R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
+                @inbounds R[j+1,i] = tmp
+            end
+        end
+    end
+
+    # Shift k-th row. We skipped the removed column.
+    for j in k:(n-1)
+        for i in k:j
+            @inbounds R[i,j] = R[i+1, j]
+        end
+        @inbounds R[j+1,j] = 0
+    end
+end
+
 
 """
     x, r = csne(R, A, b)

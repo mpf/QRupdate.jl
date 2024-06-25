@@ -75,6 +75,27 @@ b = [b; randn()]
 x, r = csne(R, A, b)
 ```
 
+### In-place operations
+
+These operations consider that you preivously allocate the matrices involved. A depth argument is required when adding columns.
+
+```julia
+m, n = 100, 4
+# Allocate matrices
+A = zeros(m,n)
+R = zeros(n,n)
+
+# Then add/remove
+a = randn(m)
+current_R_size = 0
+qraddcol!(A,R,a,current_R_size)
+current_R_size = 1
+a = randn(m)
+qraddcol!(A,R,a,current_R_size)
+
+qrdelcol!(A,R,2)
+```
+
 ## Reference
 
 [1] Björck, A. (1996). Numerical methods for least squares problems. SIAM.

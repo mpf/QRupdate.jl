@@ -1,4 +1,5 @@
 using QRupdate
+import QRupdate: solveR!, solveRT!
 using Test
 using LinearAlgebra
 
@@ -58,3 +59,60 @@ end
         @test norm( R'*R - A'*A ) < 1e-5
     end
 end
+
+@testset "qrdelcol!" begin
+    m = 100
+    A = randn(m,m)
+    Ain = copy(A)
+    Q, R = qr(A)
+    Qin, Rin = qr(A)
+    for i in 100:-1:1
+        k = rand(1:i)
+        A = A[:,1:i .!= k]
+        R = qrdelcol(R, k)
+        qrdelcol!(Ain, Rin, k)
+        @test norm(R) - norm(Rin) < 1e-10
+        @test norm(A) - norm(Ain) < 1e-10
+    end
+end
+
+@testset "solveR!" begin
+    for m in 1:100
+        A = qr(rand(m,m)).R
+        b = ones(m)
+        rhs = A * b
+        sol = zeros(m)
+        solveR!(A,rhs,sol,m)
+        @test norm(A * sol - rhs) < 1e-10
+    end
+end
+
+@testset "solveRT!" begin
+    for m in 1:100
+        A = qr(rand(m,m)).R
+        b = ones(m)
+        rhs = A' * b
+        sol = zeros(m)
+        solveRT!(A,rhs,sol,m)
+        @test norm(A' * sol - rhs) < 1e-10
+    end
+
+end
+
+@testset "qraddcol!" begin
+    m = 100
+    A = randn(m, 0)
+    R = Array{Float64, 2}(undef, 0, 0)
+    Rin = zeros(m,m)
+    Ain = zeros(m, m)
+    for i in 1:m
+        a = randn(m)
+        R = qraddcol(A, R, a)
+        A = [A a]
+        qraddcol!(Ain, Rin, a, i-1)
+        @test norm(R) - norm(Rin) < 1e-10
+        @test norm(A) - norm(Ain) < 1e-10
+    end
+end
+
+
