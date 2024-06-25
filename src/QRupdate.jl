@@ -8,7 +8,7 @@ export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne
 Auxiliary function used to solve fully allocated but incomplete R matrices.
 See documentation of qraddcol! . 
 """
-function solveR!(R::Matrix, b::Vector, sol::Vector, realSize::Int64)
+function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
     # Note: R is upper triangular
     @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
     for i in (realSize-1):-1:1
@@ -24,13 +24,13 @@ end
 Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
 See documentation of qraddcol! . 
 """
-function solveRT!(R::Matrix, b::Vector, sol::Vector, realSize::Int64)
+function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
     # Note: R is upper triangular
     @inbounds sol[1] = b[1] / R[1, 1]
     for i in 2:realSize
         @inbounds sol[i] = b[i]
         for j in 1:(i-1)
-            @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
+            @inbounds sol[i] = sol[i] - R[j,i] * sol[j]
         end
         @inbounds sol[i] = sol[i] / R[i,i]
     end
@@ -135,6 +135,12 @@ R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
 function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::Int64, β::T = zero(T)) where {T}
 
     m, n = size(A)
+
+    # First add vector to A
+    for i in 1:m
+        @inbounds A[i,N+1] = a[i]
+    end
+
     anorm  = norm(a)
     anorm2 = anorm^2
     β2  = β^2
@@ -149,26 +155,42 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
         return
     end
 
-    c = zeros(n)
-    u = zeros(n)
-    du = zeros(n)
-    mul!(c, A', a) #c = A'a 
+    c = zeros(N)
+    u = zeros(N)
+    du = zeros(N)
+    
+    for i in 1:N #c = A'a 
+        for j in 1:m
+            @inbounds c[i] += A[j,i] * a[j]
+        end
+    end
     solveRT!(R, c, u, N) #u = R'\c
     unorm2 = norm(u)^2
     d2     = anorm2 - unorm2
 
-    z = zeros(n)
-    dz = zeros(n)
+    z = zeros(N)
+    dz = zeros(N)
     r = zeros(m)
 
-    if d2 > anorm2 #DISABLE 0.01*anorm2     # Cheap case: γ is not too small
+    if d2 > anorm2
         γ = sqrt(d2)
     else
-        solveR!(R, u, z, N) #z = R\u          # First approximate solution to min ||Az - a||
-        #r = a - A*z
-        mul!(r, A, z) # r = Az
-        axpby!(1.0, a, -1, r)
-        mul!(c, A', r) #c = A'r
+        solveR!(R, u, z, N) #z = R\u  
+        #mul!(r, A, z, -1, 1) #r = a - A*z
+        for i in 1:m
+            @inbounds r[i] = a[i]
+            for j in 1:N
+                @inbounds r[i] -= A[i,j] * z[j]
+            end
+        end
+        #mul!(c, A', r) #c = A'r
+        c[:] .= 0.0
+        for i in 1:N 
+            for j in 1:m
+                @inbounds c[i] += A[j,i] * r[j]
+            end
+        end
+
         if β != 0
             axpy!(-β2, z, c) #c = c - β2*z
         end
@@ -177,9 +199,14 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
         axpy!(1, dz, z) #z  += dz          # Refine z
       # u  = R*z          # Original:     Bjork's version.
         axpy!(1, du, u) #u  += du          # Modification: Refine u
-        #r  = a - A*z
-        mul!(r, A, z)
-        axpby!(1, a, -1, r)
+        #r = a - A*z
+        for i in 1:m
+            @inbounds r[i] = a[i]
+            for j in 1:N
+                @inbounds r[i] -= A[i,j] * z[j]
+            end
+        end
+
         γ = norm(r)       # Safe computation (we know gamma >= 0).
         if !iszero(β)
             γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
@@ -189,7 +216,9 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
     # This seems to be faster than concatenation, ie:
     # [ Rin         u
     #   zeros(1,n)  γ ]
-    R[:,N+1] .= u
+    for i in 1:N
+        @inbounds R[i, N+1] = u[i]
+    end
     R[N+1,N+1] = γ
 end
 
@@ -277,7 +306,7 @@ function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
         G, y = givens(R[j+1,j], R[k,j], 1, 2)
         R[j+1,j] = y
         if j<n && G.s != 0
-            @inbounds @simd for i in j+1:n
+            for i in j+1:n
                 tmp = G.c*R[j+1,i] + G.s*R[k,i]
                 R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
                 R[j+1,i] = tmp
