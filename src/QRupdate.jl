@@ -231,7 +231,7 @@ vector.
 function qraddrow(R::AbstractMatrix{T}, a::AbstractMatrix{T}) where {T}
 
     n = size(R,1)
-    @inbounds @simd for k in 1:n
+    @inbounds for k in 1:n
         G, r = givens( R[k,k], a[k], 1, 2 )
         B = G * [ reshape(R[k,k:n], 1, n-k+1)
                   reshape(a[:,k:n], 1, n-k+1) ]
@@ -271,7 +271,7 @@ function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
         G, y = givens(R[j+1,j], R[k,j], 1, 2)
         R[j+1,j] = y
         if j<n && G.s != 0
-            @inbounds @simd for i in j+1:n
+            @inbounds for i in j+1:n
                 tmp = G.c*R[j+1,i] + G.s*R[k,i]
                 R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
                 R[j+1,i] = tmp
@@ -303,13 +303,13 @@ function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
 
 
     for j in k:(n-1)                # Forward sweep to reduce k-th row to zeros
-        G, y = givens(R[j+1,j], R[k,j], 1, 2)
-        R[j+1,j] = y
+        @inbounds G, y = givens(R[j+1,j], R[k,j], 1, 2)
+        @inbounds R[j+1,j] = y
         if j<n && G.s != 0
             for i in j+1:n
-                tmp = G.c*R[j+1,i] + G.s*R[k,i]
-                R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
-                R[j+1,i] = tmp
+                @inbounds tmp = G.c*R[j+1,i] + G.s*R[k,i]
+                @inbounds R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
+                @inbounds R[j+1,i] = tmp
             end
         end
     end
@@ -319,7 +319,7 @@ function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
         for i in k:j
             @inbounds R[i,j] = R[i+1, j]
         end
-        R[j+1,j] = 0
+        @inbounds R[j+1,j] = 0
     end
 end
 
