@@ -5,11 +5,9 @@ using LinearAlgebra
 export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne
 
 """
-Auxiliary function used to solve fully allocated but incomplete R matrices.
-See documentation of qraddcol! . 
+Triangular solve `Rx = b`, where `R` is upper triangular of size `realSize x realSize`. The storage of `R` is described in the documentation for `qraddcol!`.
 """
-function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
-    # Note: R is upper triangular
+function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Integer) where {T}
     @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
     for i in (realSize-1):-1:1
         @inbounds sol[i] = b[i]
@@ -21,11 +19,9 @@ function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::I
 end
 
 """
-Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
-See documentation of qraddcol! . 
+Triangular solve `R'x = b`, where `R` is upper triangular of size `realSize x realSize`. The storage of `R` is described in the documentation for `qraddcol!`.
 """
-function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
-    # Note: R is upper triangular
+function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Integer) where {T}
     @inbounds sol[1] = b[1] / R[1, 1]
     for i in 2:realSize
         @inbounds sol[i] = b[i]
@@ -35,7 +31,6 @@ function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::
         @inbounds sol[i] = sol[i] / R[i,i]
     end
 end
-
 
 
 """
@@ -65,7 +60,7 @@ If `A` has no columns yet, input `A = []`, `R = []`.
 """
 function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β::T = zero(T)) where {T}
 
-    m, n = size(A)
+    n = size(A, 2)
     anorm  = norm(a)
     anorm2 = anorm^2
     β2  = β^2
@@ -134,7 +129,7 @@ R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
 """
 function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::Int64, β::T = zero(T)) where {T}
 
-    m, n = size(A)
+    m = size(A, 1)
 
     # First add vector to A
     for i in 1:m
@@ -155,9 +150,9 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
         return
     end
 
-    c = zeros(N)
-    u = zeros(N)
-    du = zeros(N)
+    c = zeros(T, N)
+    u = zeros(T, N)
+    du = zeros(T, N)
     
     for i in 1:N #c = A'a 
         for j in 1:m
@@ -168,9 +163,9 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
     unorm2 = norm(u)^2
     d2     = anorm2 - unorm2
 
-    z = zeros(N)
-    dz = zeros(N)
-    r = zeros(m)
+    z = zeros(T, N)
+    dz = zeros(T, N)
+    r = zeros(T, m)
 
     if d2 > anorm2
         γ = sqrt(d2)
@@ -184,14 +179,14 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
             end
         end
         #mul!(c, A', r) #c = A'r
-        c[:] .= 0.0
+        c[:] .= zero(T)
         for i in 1:N 
             for j in 1:m
                 @inbounds c[i] += A[j,i] * r[j]
             end
         end
 
-        if β != 0
+        if !iszero(β)
             axpy!(-β2, z, c) #c = c - β2*z
         end
         solveRT!(R, c, du, N) #du = R'\c
@@ -213,8 +208,8 @@ function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::
         end
     end
 
-    # This seems to be faster than concatenation, ie:
-    # [ Rin         u
+    # Concatenate new row and column to R:
+    # [ R           u
     #   zeros(1,n)  γ ]
     for i in 1:N
         @inbounds R[i, N+1] = u[i]
@@ -261,7 +256,7 @@ triangle.
     18 Jun 2007: R is now the exact size on entry and exit.
     30 Dec 2015: Translate to Julia.
 """
-function qrdelcol(R::AbstractMatrix{T}, k::Int) where {T}
+function qrdelcol(R::AbstractMatrix{T}, k::Integer) where {T}
 
     m = size(R,1)
     R = R[:,1:m .!= k]          # Delete the k-th column
@@ -286,10 +281,9 @@ end
 This function is identical to the previous one, but instead leaves R
 with a column of zeros. This is useful to avoid copying the matrix. 
 """
-function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
+function qrdelcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, k::Integer) where {T}
 
-    m = size(A,1)
-    n = size(A,2)               # Should have m=n+1
+    m, n = size(A)
     
     # Shift columns. This is apparently faster than copying views.
     for j in (k+1):n, i in 1:m
@@ -297,15 +291,14 @@ function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
         @inbounds A[i,j-1] = A[i, j]
     end
     for i in 1:m
-        @inbounds R[i,n] = 0.0
-        @inbounds A[i,n] = 0.0
+        @inbounds R[i,n] = zero(T)
+        @inbounds A[i,n] = zero(T)
     end
 
-
-    for j in k:(n-1)                # Forward sweep to reduce k-th row to zeros
+    for j in k:(n-1)          # Forward sweep to reduce k-th row to zeros
         @inbounds G, y = givens(R[j+1,j], R[k,j], 1, 2)
         @inbounds R[j+1,j] = y
-        if j<n && G.s != 0
+        if j<n && !iszero(G.s)
             for i in j+1:n
                 @inbounds tmp = G.c*R[j+1,i] + G.s*R[k,i]
                 @inbounds R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
@@ -319,10 +312,9 @@ function qrdelcol!(A::AbstractMatrix{T},R::AbstractMatrix{T}, k::Int) where {T}
         for i in k:j
             @inbounds R[i,j] = R[i+1, j]
         end
-        @inbounds R[j+1,j] = 0
+        @inbounds R[j+1,j] = zero(T)
     end
 end
-
 
 """
     x, r = csne(R, A, b)
@@ -339,9 +331,9 @@ function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where 
     q = A'b
     x = R' \ q
 
-    bnorm2 = sum(abs2, b)
-    xnorm2 = sum(abs2, x)
-    d2 = bnorm2 - xnorm2
+    # bnorm2 = sum(abs2, b)
+    # xnorm2 = sum(abs2, x)
+    # d2 = bnorm2 - xnorm2
 
     x = R \ x
 
@@ -354,6 +346,5 @@ function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where 
     r = b - A*x
     return (x, r)
 end
-
 
 end # module
