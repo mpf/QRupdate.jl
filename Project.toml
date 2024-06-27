@@ -1,11 +1,11 @@
 name = "QRupdate"
 uuid = "29d2ae51-7246-454b-9a65-19ff7b2849a5"
-authors = ["Michael P. Friedlander <michael@friedlander.io>",
-	   "Michael A. Saunders <saunders@stanford.edu>"]
+authors = ["Michael P. Friedlander <michael@friedlander.io>", "Michael A. Saunders <saunders@stanford.edu>"]
 version = "1.0.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 
 [compat]
 julia = "1.7"

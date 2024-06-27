@@ -3,6 +3,56 @@ import QRupdate: solveR!, solveRT!
 using Test
 using LinearAlgebra
 
+@testset "qraddcol!" begin
+    m = 100
+    work = rand(m)
+    work2 = rand(m)
+    work3 = rand(m)
+    work4 = rand(m)
+    work5 = rand(m)
+    A = randn(m, 0)
+    R = Array{Float64, 2}(undef, 0, 0)
+    Rin = zeros(m,m)
+    Ain = zeros(m, m)
+    for i in 1:m
+        a = randn(m)
+        R = qraddcol(A, R, a)
+        A = [A a]
+        qraddcol!(Ain, Rin, a, i-1, work, work2, work3, work4, work5)
+        @test norm(R) - norm(Rin) < 1e-10
+        @test norm(A) - norm(Ain) < 1e-10
+    end
+end
+
+
+
+@testset "csne!" begin
+    
+    # work vecs
+    m = 100
+    work = rand(m)
+    work2 = rand(m)
+    work3 = rand(m)
+    work4 = rand(m)
+    work5 = rand(m)
+    sol = zeros(m)
+    A = randn(m, 0)
+    R = Array{Float64, 2}(undef, 0, 0)
+    b = randn(m)
+    Rin = zeros(m,m)
+    Ain = zeros(m, m)
+    for i in 1:m
+        a = randn(m)
+        R = qraddcol(A, R, a)
+        A = [A a]
+        qraddcol!(Ain, Rin, a, i-1, work, work2, work3, work4, work5)
+        x, r = csne(R, A, b)
+        csne!(Rin, Ain, b, sol, work, work2, work3, work4, i)
+        @test norm(x) - norm(sol) < 1e-8
+    end
+end
+
+
 @testset "qraddcol with β = 0" begin
     m = 100
     A = randn(m, 0)
@@ -96,23 +146,7 @@ end
         solveRT!(A,rhs,sol,m)
         @test norm(A' * sol - rhs) < 1e-10
     end
-
 end
 
-@testset "qraddcol!" begin
-    m = 100
-    A = randn(m, 0)
-    R = Array{Float64, 2}(undef, 0, 0)
-    Rin = zeros(m,m)
-    Ain = zeros(m, m)
-    for i in 1:m
-        a = randn(m)
-        R = qraddcol(A, R, a)
-        A = [A a]
-        qraddcol!(Ain, Rin, a, i-1)
-        @test norm(R) - norm(Rin) < 1e-10
-        @test norm(A) - norm(Ain) < 1e-10
-    end
-end
 
 
