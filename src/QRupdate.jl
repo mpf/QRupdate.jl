@@ -8,6 +8,9 @@ function swapcols!(M::Matrix{T},i::Int,j::Int) where {T}
     Base.permutecols!!(M, replace(axes(M,2), i=>j, j=>i))
 end
 
+ORTHO_TOL = 1.0 # err = |unew|^2 / |uold|^2 < ORTHO_TOL
+ORTHO_MAX_IT = 1
+verbose = true
 
 """
 Auxiliary function used to solve fully allocated but incomplete R matrices.
@@ -143,6 +146,12 @@ function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vec
 
     #@timeit "get views" begin
     m, n = size(A)
+    @assert size(work,1) == n "Expected "*string(n)*", actual size: " * string(size(work))
+    @assert size(work2,1) == n
+    @assert size(u,1) == n
+    @assert size(z,1) == n
+    @assert size(r,1) == m
+
     if N < n
         cols = 1:N
         Atr = view(A, :, cols) #truncated
@@ -152,7 +161,6 @@ function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vec
         u_tr = view(u, cols)
         z_tr = view(z, cols)
     else
-        cols = 1:N
         Atr = A
         Rtr = R
         work_tr = work
@@ -161,11 +169,6 @@ function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vec
         z_tr = z
     end
     #end #timeit get views
-
-    # End checking work vectors
-
-    # First add vector to A
-    view(A,:,N+1) .= a
 
     #@timeit "norms" begin
     anorm2 = a'a
@@ -178,6 +181,7 @@ function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vec
     if N == 0
         anorm  = sqrt(anorm2)
         R[1,1] = anorm
+        view(A,:,N+1) .= a
         return
     end
     #end #timeit norms
@@ -190,60 +194,54 @@ function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vec
     unorm2_prev = anorm2
     #end #timeit norms 2
 
+    solveR!(R, u, z, N) #z = R\u  
+    copy!(r, a)
+    mul!(r, Atr, z_tr, -1, 1) #r = a - A*z
+    γ = norm(r)
+    mul!(work_tr, Atr', r) # r := c = A'r
+    err = sqrt(work_tr'work_tr / anorm2)
 
-    err = unorm2 / unorm2_prev
-    unorm2_prev = unorm2
+
     # Iterative refinement
-    if err >= 0.5
-        solveR!(R, u, z, N) #z = R\u  
+    if err < ORTHO_TOL
+        view(R,1:N,N+1) .= view(u, 1:N)
+        R[N+1,N+1] = γ
+        view(A,:,N+1) .= a
+        return 
+    else
+    i = 0
+    while err > ORTHO_TOL && i < ORTHO_MAX_IT
+
+        #if β != 0
+            #axpy!(-β2, z, work) #c = c - β2*z
+        #end
+        solveRT!(R, work, work2, N) # work2 := du = R'\c
+        solveR!(R, work2, work, N) # work := dz = R\du
+        axpy!(1.0, work_tr, z_tr) #z  += dz          # Refine z
+        #@timeit "residual 2" begin
+
         copy!(r, a)
-        mul!(r, Atr, z_tr, -1, 1) #r = a - A*z
+        mul!(r, Atr, z_tr, -1.0, 1.0) #r = a - A*z
         γ = norm(r)
-    end
-
-    while err < 0.5
-        println("Reorthogonalize:", err)
-        solveR!(R, u, z, N) #z = R\u  
-
-        #@timeit "residual" begin
-        copy!(r, a)
-        mul!(r, Atr, z_tr, -1, 1) #r = a - A*z
-        #end #timeit residual
-
+        work .= 0.0
         mul!(work_tr, Atr', r) # work := c = A'r
 
-        if β != 0
-            axpy!(-β2, z, work) #c = c - β2*z
-        end
-        solveRT!(R, work, work2, N) # work2 := du = R'\c
-        axpy!(1, work2_tr, u_tr) #u  += du          # Modification: Refine u
-        solveR!(R, work2, work, N) # work := dz = R\du
-        axpy!(1, work_tr, z_tr) #z  += dz          # Refine z
-        #r = a - A*z
-        #@timeit "residual 2" begin
-        copy!(r, a)
-        mul!(r, Atr, z_tr, -1, 1)
-        #end #@timeit residual 2
+        err = sqrt(work_tr'work_tr / anorm2)
+        #verbose && println(" *** Reorthogonalize ",string(i)," . Error:", err)
+        verbose && print("*")
+        i += 1
 
-        γ = norm(r)       # Safe computation (we know gamma >= 0).
-        if !iszero(β)
-            γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
-        end
-        unorm2 = u'u
-        err = unorm2 / unorm2_prev
-        unorm2_prev = unorm2
-    end
 
-    # This seems to be faster than concatenation, ie:
-    # [ Rin         u
-    #   zeros(1,n)  γ ]
-    #for i in 1:N
-        #@inbounds R[i, N+1] = u[i]
-    #end
-    #@timeit "final update" begin
+        #if !iszero(β)
+            #γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
+        #end
+    end # while
+    end # if
+
+    axpy!(1, work2_tr, u_tr)
     view(R,1:N,N+1) .= view(u, 1:N)
     R[N+1,N+1] = γ
-    #end #timeit final update
+    view(A,:,N+1) .= a
 end
 
 """
@@ -388,10 +386,15 @@ function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where 
 end
 
 function csne!(R::Matrix{T}, A::Matrix{T}, b::Vector{T}, sol::Vector{T}, work::Vector{T}, work2::Vector{T}, u::Vector{T},  r::Vector{T}, N::Int) where {T}
-    #c,u,sol,du,dsol are R^n. Only r is R^m
+    #c,u,sol,du are R^n. Only r is R^m
     #c -> work; du -> work2. dsol is redundant.
 
     m, n = size(A)
+    @assert size(sol,1) == n
+    @assert size(work,1) == n
+    @assert size(work2,1) == n
+    @assert size(u,1) == n
+    @assert size(r,1) == m
     if N == n
         cols = 1:N
         Atr = view(A, :, cols) #truncated
@@ -401,7 +404,6 @@ function csne!(R::Matrix{T}, A::Matrix{T}, b::Vector{T}, sol::Vector{T}, work::V
         u_tr = view(u, cols)
         sol_tr = view(sol, cols)
     else
-        cols = 1:N
         Atr = A
         Rtr = R
         work_tr = work
@@ -409,32 +411,34 @@ function csne!(R::Matrix{T}, A::Matrix{T}, b::Vector{T}, sol::Vector{T}, work::V
         u_tr = u
         sol_tr = sol
     end
-
+    bnorm2 = b'b
+    # work := c = A'b
     mul!(work_tr, Atr', b)
+    solveRT!(R, work, u, N)
 
-    solveRT!(R, work, u, N) # work_n2 := x = R' \ work_n   
+    solveR!(R, u, sol, N) #z = R\u  
+    copy!(r, b)
+    mul!(r, Atr, sol_tr, -1, 1) #r = b - A*z
+    mul!(work_tr, Atr', r) # r := c = A'r
+    err = sqrt(work_tr'work_tr / bnorm2)
 
-    unorm2_prev = b'b
-    unorm2 = u'u
-    err = unorm2 / unorm2_prev
-    unorm2_prev = unorm2
-    while err < 0.5
-        println("Reorthogonalize csne:", err)
+    i = 0
+    while err > ORTHO_TOL && i < ORTHO_MAX_IT
 
-        solveR!(R, u, sol, N) # sol := x = R \ work_n2
+        solveRT!(R, work, work2, N) # work2 := du = R'\c
+        solveR!(R, work2, work, N) # work := dz = R\du
+        axpy!(1.0, work_tr, sol_tr) #z  += dz          # Refine z
+
         copy!(r, b)
-        mul!(r, Atr, sol_tr, -1, 1) # r = b - A sol
-        mul!(work_tr, Atr', r) # work_n := c = A'r
+        mul!(r, Atr, sol_tr, -1.0, 1.0) #r = b - A*z
+        mul!(work_tr, Atr', r) # work := c = A'r
 
-        # At this point, work_n = q,  sol = x
-        solveRT!(R, work, work2, N) # work2 := du = R' \ work
+        err = sqrt(work_tr'work_tr / bnorm2)
+        #verbose && println(" *** Reorthogonalize ",string(i), " CSNE. Error:", err)
+        verbose && print("*")
+        i += 1
 
-        axpy!(1.0, work2, u)
-        unorm2 = u'u
-        err = unorm2 / unorm2_prev
-        unorm2_prev = unorm2
     end
-    solveR!(R, u, sol, N) # sol := x = R \ work_n2
 end
 
 

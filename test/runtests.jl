@@ -19,8 +19,8 @@ using LinearAlgebra
         R = qraddcol(A, R, a)
         A = [A a]
         qraddcol!(Ain, Rin, a, i-1, work, work2, work3, work4, work5)
-        @test norm(R) - norm(Rin) < 1e-10
-        @test norm(A) - norm(Ain) < 1e-10
+        @test norm(R - view(Rin,1:i, 1:i)) < 1e-10
+        @test norm(A - view(Ain, :, 1:i)) < 1e-10
     end
 end
 
@@ -48,7 +48,7 @@ end
         qraddcol!(Ain, Rin, a, i-1, work, work2, work3, work4, work5)
         x, r = csne(R, A, b)
         csne!(Rin, Ain, b, sol, work, work2, work3, work4, i)
-        @test norm(x) - norm(sol) < 1e-8
+        @test norm(x - view(sol, 1:i)) < 1e-8
     end
 end
 
@@ -121,8 +121,9 @@ end
         A = A[:,1:i .!= k]
         R = qrdelcol(R, k)
         qrdelcol!(Ain, Rin, k)
-        @test norm(R) - norm(Rin) < 1e-10
-        @test norm(A) - norm(Ain) < 1e-10
+        im1 = i-1
+        @test norm(R- view(Rin,1:im1,1:im1)) < 1e-10
+        @test norm(A - view(Ain,:,1:im1)) < 1e-10
     end
 end
 
