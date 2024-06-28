@@ -8,7 +8,7 @@ function swapcols!(M::Matrix{T},i::Int,j::Int) where {T}
     Base.permutecols!!(M, replace(axes(M,2), i=>j, j=>i))
 end
 
-ORTHO_TOL = 1.0 # err = |unew|^2 / |uold|^2 < ORTHO_TOL
+ORTHO_TOL = 1e-6 # err = |unew|^2 / |uold|^2 < ORTHO_TOL
 ORTHO_MAX_IT = 1
 verbose = true
 
@@ -16,7 +16,7 @@ verbose = true
 Auxiliary function used to solve fully allocated but incomplete R matrices.
 See documentation of qraddcol! . 
 """
-function solveR!(R::Matrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
+function solveR!(R::matT, b::vecT, sol::vecT, realSize::Int64) where {matT, vecT}
     # Note: R is upper triangular
     @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
     for i in (realSize-1):-1:1
@@ -32,7 +32,7 @@ end
 Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
 See documentation of qraddcol! . 
 """
-function solveRT!(R::Matrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Int64) where {T}
+function solveRT!(R::matT, b::vecT, sol::vecT, realSize::Int64) where {matT, vecT}
     # Note: R is upper triangular
     @inbounds sol[1] = b[1] / R[1, 1]
     for i in 2:realSize
@@ -140,7 +140,7 @@ R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
      0  0  0           0  0  0           0  r22  0
      0  0  0]          0  0  0]          0    0  0]
 """
-function qraddcol!(A::Matrix{T}, R::Matrix{T}, a::Vector{T}, N::Int64, work::Vector{T}, work2::Vector{T}, u::Vector{T}, z::Vector{T}, r::Vector{T}, β::T = zero(T)) where {T}
+function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z::zT, r::rT, β::T = zero(Float64)) where {AT,RT,aT,wT,w2T,uT,zT,rT,T}
     #c,u,z,du,dz are R^n. Only r is R^m
     #c -> work; du -> work2. dz is redundant
 
@@ -385,7 +385,7 @@ function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where 
     return (x, r)
 end
 
-function csne!(R::Matrix{T}, A::Matrix{T}, b::Vector{T}, sol::Vector{T}, work::Vector{T}, work2::Vector{T}, u::Vector{T},  r::Vector{T}, N::Int) where {T}
+function csne!(R::RT, A::AT, b::bT, sol::solT, work::wT, work2::w2T, u::uT,  r::rT, N::Int) where {RT,AT,bT,solT,wT,w2T,uT,rT}
     #c,u,sol,du are R^n. Only r is R^m
     #c -> work; du -> work2. dsol is redundant.
 
