@@ -188,12 +188,7 @@ function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z
 
     # work := c = A'a
     mul!(work_tr, Atr', a)
-    solveRT!(R, work, u, N) #u = R'\c = R'\work
-    #@timeit "norms 2" begin
-    unorm2 = u'u
-    unorm2_prev = anorm2
-    #end #timeit norms 2
-
+    solveRT!(R, work_tr, u, N) #u = R'\c = R'\work
     solveR!(R, u, z, N) #z = R\u  
     copy!(r, a)
     mul!(r, Atr, z_tr, -1, 1) #r = a - A*z
