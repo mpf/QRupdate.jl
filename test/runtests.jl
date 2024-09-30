@@ -5,18 +5,19 @@ using LinearAlgebra
 
 @testset "qraddcol!" begin
     m = 100
-    work = rand(m)
-    work2 = rand(m)
-    work3 = rand(m)
-    work4 = rand(m)
-    work5 = rand(m)
-    A = randn(m, 0)
-    R = Array{Float64, 2}(undef, 0, 0)
-    Rin = zeros(m,m)
-    Ain = zeros(m, m)
+    T = ComplexF64
+    work = rand(T, m)
+    work2 = rand(T, m)
+    work3 = rand(T, m)
+    work4 = rand(T, m)
+    work5 = rand(T, m)
+    A = randn(T, m, 0)
+    R = Array{T, 2}(undef, 0, 0)
+    Rin = zeros(T,m,m)
+    Ain = zeros(T,m,m)
     for i in 1:m
-        a = randn(m)
-        R = qraddcol(A, R, a)
+        a = randn(T, m)
+        R = qraddcol(A, R, a, zero(T))
         A = [A a]
         qraddcol!(Ain, Rin, a, i-1, work, work2, work3, work4, work5)
         @test norm(R - view(Rin,1:i, 1:i)) < 1e-10

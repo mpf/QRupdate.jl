@@ -32,7 +32,7 @@ end
 Auxiliary function used to solve transpose of fully allocated but incomplete R matrices.
 See documentation of qraddcol! . 
 """
-function solveRT!(R::matT, b::vecT, sol::vecT, realSize::Int64) where {matT, vecT}
+function solveRT!(R::matT, b::vecT, sol::vecT2, realSize::Int64) where {matT, vecT, vecT2}
     # Note: R is upper triangular
     @inbounds sol[1] = b[1] / R[1, 1]
     for i in 2:realSize
@@ -140,7 +140,7 @@ R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
      0  0  0           0  0  0           0  r22  0
      0  0  0]          0  0  0]          0    0  0]
 """
-function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z::zT, r::rT, β::T = zero(Float64)) where {AT,RT,aT,wT,w2T,uT,zT,rT,T}
+function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z::zT, r::rT) where {AT,RT,aT,wT,w2T,uT,zT,rT,T}
     #c,u,z,du,dz are R^n. Only r is R^m
     #c -> work; du -> work2. dz is redundant
 
@@ -172,11 +172,6 @@ function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z
 
     #@timeit "norms" begin
     anorm2 = a'a
-    β2  = β^2
-    if β != 0
-        anorm2 = anorm2 + β2
-        anorm  = sqrt(anorm2)
-    end
 
     if N == 0
         anorm  = sqrt(anorm2)
@@ -207,9 +202,6 @@ function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z
     i = 0
     while err > ORTHO_TOL && i < ORTHO_MAX_IT
 
-        #if β != 0
-            #axpy!(-β2, z, work) #c = c - β2*z
-        #end
         solveRT!(R, work, work2, N) # work2 := du = R'\c
         solveR!(R, work2, work, N) # work := dz = R\du
         axpy!(1.0, work_tr, z_tr) #z  += dz          # Refine z
