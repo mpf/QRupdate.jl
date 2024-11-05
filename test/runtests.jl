@@ -65,14 +65,17 @@ end
     A = randn(m,m)
     Ain = copy(A)
     Q, R = qr(A)
-    Qin, Rin = qr(A)
+    Qin = deepcopy(Q)
+    Rin = deepcopy(R)
+    actual_size = m
     for i in 100:-1:1
         k = rand(1:i)
         A = A[:,1:i .!= k]
         R = qrdelcol(R, k)
         qrdelcol!(Ain, Rin, k)
-        @test norm(R) - norm(Rin) < 1e-10
-        @test norm(A) - norm(Ain) < 1e-10
+        actual_size -= 1
+        @test norm(R - Rin[1:actual_size,1:actual_size]) < 1e-10
+        @test norm(A - Ain[:,1:actual_size]) < 1e-10
     end
 end
 
@@ -105,13 +108,15 @@ end
     R = Array{Float64, 2}(undef, 0, 0)
     Rin = zeros(m,m)
     Ain = zeros(m, m)
+    actual_size = 0
     for i in 1:m
         a = randn(m)
         R = qraddcol(A, R, a)
         A = [A a]
         qraddcol!(Ain, Rin, a, i-1)
-        @test norm(R) - norm(Rin) < 1e-10
-        @test norm(A) - norm(Ain) < 1e-10
+        actual_size += 1
+        @test norm(R - Rin[1:actual_size,1:actual_size]) < 1e-10
+        @test norm(A - Ain[:,1:actual_size]) < 1e-10
     end
 end
 

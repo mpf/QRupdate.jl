@@ -283,36 +283,36 @@ with a column of zeros. This is useful to avoid copying the matrix.
 """
 function qrdelcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, k::Integer) where {T}
 
+    # Note that R is n x n
     m, n = size(A)
+    mR,nR = size(R)
     
     # Shift columns. This is apparently faster than copying views.
-    for j in (k+1):n, i in 1:m
-        @inbounds R[i,j-1] = R[i, j]
-        @inbounds A[i,j-1] = A[i, j]
+    @inbounds for j in (k+1):n
+        R[:,j-1] .= @view R[:, j]
+        A[:,j-1] .= @view A[:, j]
     end
-    for i in 1:m
-        @inbounds R[i,n] = zero(T)
-        @inbounds A[i,n] = zero(T)
-    end
+    A[:,n] .= zero(T)
+    R[:,n] .= zero(T)
 
-    for j in k:(n-1)          # Forward sweep to reduce k-th row to zeros
-        @inbounds G, y = givens(R[j+1,j], R[k,j], 1, 2)
-        @inbounds R[j+1,j] = y
+    @inbounds for j in k:(nR-1)          # Forward sweep to reduce k-th row to zeros
+        G, y = givens(R[j+1,j], R[k,j], 1, 2)
+        R[j+1,j] = y
         if j<n && !iszero(G.s)
             for i in j+1:n
-                @inbounds tmp = G.c*R[j+1,i] + G.s*R[k,i]
-                @inbounds R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
-                @inbounds R[j+1,i] = tmp
+                tmp = G.c*R[j+1,i] + G.s*R[k,i]
+                R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
+                R[j+1,i] = tmp
             end
         end
     end
 
     # Shift k-th row. We skipped the removed column.
-    for j in k:(n-1)
+    @inbounds for j in k:(n-1)
         for i in k:j
-            @inbounds R[i,j] = R[i+1, j]
+            R[i,j] = R[i+1, j]
         end
-        @inbounds R[j+1,j] = zero(T)
+        R[j+1,j] = zero(T)
     end
 end
 
