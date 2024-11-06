@@ -1,7 +1,6 @@
 name = "QRupdate"
 uuid = "29d2ae51-7246-454b-9a65-19ff7b2849a5"
-authors = ["Michael P. Friedlander <michael@friedlander.io>",
-	   "Michael A. Saunders <saunders@stanford.edu>"]
+authors = ["Michael P. Friedlander <michael@friedlander.io>", "Michael A. Saunders <saunders@stanford.edu>"]
 version = "1.0.0"
 
 [deps]
