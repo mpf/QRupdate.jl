@@ -2,34 +2,39 @@ module QRupdate
 
 using LinearAlgebra
 
-export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne
+export qraddcol, qraddcol!, qraddrow, qrdelcol, qrdelcol!, csne, csne!
+
+function swapcols!(M::Matrix{T},i::Int,j::Int) where {T}
+    Base.permutecols!!(M, replace(axes(M,2), i=>j, j=>i))
+end
+
+ORTHO_TOL = 1e-6 # err = |unew|^2 / |uold|^2 < ORTHO_TOL
+ORTHO_MAX_IT = 1
+verbose = true
 
 """
 Triangular solve `Rx = b`, where `R` is upper triangular of size `realSize x realSize`. The storage of `R` is described in the documentation for `qraddcol!`.
 """
-function solveR!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Integer) where {T}
-    @inbounds sol[realSize] = b[realSize] / R[realSize, realSize]
-    for i in (realSize-1):-1:1
-        @inbounds sol[i] = b[i]
-        for j in realSize:-1:(i+1)
-            @inbounds sol[i] = sol[i] - R[i,j] * sol[j]
-        end
-        @inbounds sol[i] = sol[i] / R[i,i]
-    end
+function solveR!(R::AbstractMatrix{T}, b::AbstractVector{T}, sol::AbstractVector{T}) where {T}
+    # Note  : R is upper triangular
+    # Note 2: I tried implementing a forward substitution algorithm by 
+    # hand but in the end in was a bit slower and less accurate for smaller
+    # matrix sizes, so I left the abstract implementation. The Upper/Lower functions
+    # provide a view only, so they do not incur in further memory allocations. I 
+    # verified this with BenchmarkTooks. 
+    # N Barnafi 06/11/24 
+    sol .= b
+    ldiv!(UpperTriangular(R), sol)
 end
 
 """
 Triangular solve `R'x = b`, where `R` is upper triangular of size `realSize x realSize`. The storage of `R` is described in the documentation for `qraddcol!`.
 """
-function solveRT!(R::AbstractMatrix{T}, b::Vector{T}, sol::Vector{T}, realSize::Integer) where {T}
-    @inbounds sol[1] = b[1] / R[1, 1]
-    for i in 2:realSize
-        @inbounds sol[i] = b[i]
-        for j in 1:(i-1)
-            @inbounds sol[i] = sol[i] - R[j,i] * sol[j]
-        end
-        @inbounds sol[i] = sol[i] / R[i,i]
-    end
+function solveRT!(R::AbstractMatrix{T}, b::AbstractVector{T}, sol::AbstractVector{T}) where {T}
+    # Note: R is upper triangular.
+    # Note 2: We solve for the conjugate transpose.
+    sol .= b
+    ldiv!(LowerTriangular(R'), sol)
 end
 
 
@@ -70,7 +75,7 @@ function qraddcol(A::AbstractMatrix{T}, Rin::AbstractMatrix{T}, a::Vector{T}, β
     end
 
     if n == 0
-        return reshape([anorm], 1, 1)
+        return reshape([convert(T, anorm)], 1, 1)
     end
 
     R = UpperTriangular(Rin)
@@ -127,94 +132,97 @@ R = [0  0  0    R = [r11  0  0    R = [r11  r12  0
      0  0  0           0  0  0           0  r22  0
      0  0  0]          0  0  0]          0    0  0]
 """
-function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::Vector{T}, N::Int64, β::T = zero(T)) where {T}
+#function qraddcol!(A::AT, R::RT, a::aT, N::Int64, work::wT, work2::w2T, u::uT, z::zT, r::rT) where {AT,RT,aT,wT,w2T,uT,zT,rT,T}
+function qraddcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, a::AbstractVector{T}, N::Int64, work::AbstractVector{T}, work2::AbstractVector{T}, u::AbstractVector{T}, z::AbstractVector{T}, r::AbstractVector{T}) where {T}
+    #c,u,z,du,dz are R^n. Only r is R^m
+    #c -> work; du -> work2. dz is redundant
 
-    m = size(A, 1)
+    #@timeit "get views" begin
+    m, n = size(A)
+    @assert size(work,1) == n "Expected "*string(n)*", actual size: " * string(size(work))
+    @assert size(work2,1) == n
+    @assert size(u,1) == n
+    @assert size(z,1) == n
+    @assert size(r,1) == m
 
-    # First add vector to A
-    for i in 1:m
-        @inbounds A[i,N+1] = a[i]
+    if N < n
+        cols = 1:N
+        Atr = view(A, :, cols) #truncated
+        Rtr = view(R, cols, cols)
+        work_tr = view(work, cols)
+        work2_tr = view(work2, cols)
+        u_tr = view(u, cols)
+        z_tr = view(z, cols)
+    else
+        Atr = A
+        Rtr = R
+        work_tr = work
+        work2_tr = work2
+        u_tr = u
+        z_tr = z
     end
+    #end #timeit get views
 
-    anorm  = norm(a)
+    #@timeit "norms" begin
+    anorm = norm(a)
     anorm2 = anorm^2
-    β2  = β^2
-    if β != 0
-        anorm2 = anorm2 + β2
-        anorm  = sqrt(anorm2)
-    end
 
     if N == 0
-        #return reshape([anorm], 1, 1)
+        anorm  = sqrt(anorm2)
         R[1,1] = anorm
+        view(A,:,N+1) .= a
         return
     end
+    #end #timeit norms
 
-    c = zeros(T, N)
-    u = zeros(T, N)
-    du = zeros(T, N)
-    
-    for i in 1:N #c = A'a 
-        for j in 1:m
-            @inbounds c[i] += A[j,i] * a[j]
-        end
-    end
-    solveRT!(R, c, u, N) #u = R'\c
-    unorm2 = norm(u)^2
-    d2     = anorm2 - unorm2
+    # work := c = A'a
+    mul!(work_tr, Atr', a)
+    solveRT!(Rtr, work_tr, u_tr) #u = R'\c = R'\work
+    solveR!(Rtr, u_tr, z_tr) #z = R\u  
+    copy!(r, a)
+    mul!(r, Atr, z_tr, -1, 1) #r = a - A*z
+    γ = norm(r)
+    mul!(work_tr, Atr', r) # r := c = A'r
+    err = norm(work_tr) / sqrt(anorm2)
 
-    z = zeros(T, N)
-    dz = zeros(T, N)
-    r = zeros(T, m)
-
-    if d2 > anorm2
-        γ = sqrt(d2)
+    # Iterative refinement
+    if err < ORTHO_TOL
+        view(R,1:N,N+1) .= view(u, 1:N)
+        R[N+1,N+1] = γ
+        view(A,:,N+1) .= a
+        return 
     else
-        solveR!(R, u, z, N) #z = R\u  
-        #mul!(r, A, z, -1, 1) #r = a - A*z
-        for i in 1:m
-            @inbounds r[i] = a[i]
-            for j in 1:N
-                @inbounds r[i] -= A[i,j] * z[j]
-            end
-        end
-        #mul!(c, A', r) #c = A'r
-        c[:] .= zero(T)
-        for i in 1:N 
-            for j in 1:m
-                @inbounds c[i] += A[j,i] * r[j]
-            end
-        end
 
-        if !iszero(β)
-            axpy!(-β2, z, c) #c = c - β2*z
-        end
-        solveRT!(R, c, du, N) #du = R'\c
-        solveR!(R, du, dz, N) #dz = R\du
-        axpy!(1, dz, z) #z  += dz          # Refine z
-      # u  = R*z          # Original:     Bjork's version.
-        axpy!(1, du, u) #u  += du          # Modification: Refine u
-        #r = a - A*z
-        for i in 1:m
-            @inbounds r[i] = a[i]
-            for j in 1:N
-                @inbounds r[i] -= A[i,j] * z[j]
-            end
-        end
+    i = 0
+    while err > ORTHO_TOL && i < ORTHO_MAX_IT
 
-        γ = norm(r)       # Safe computation (we know gamma >= 0).
-        if !iszero(β)
-            γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
-        end
-    end
+        solveRT!(Rtr, work_tr, work2_tr) # work2 := du = R'\c
+        solveR!(Rtr, work2_tr, work_tr) # work := dz = R\du
+        axpy!(1.0, work_tr, z_tr) #z  += dz          # Refine z
+        #@timeit "residual 2" begin
 
-    # Concatenate new row and column to R:
-    # [ R           u
-    #   zeros(1,n)  γ ]
-    for i in 1:N
-        @inbounds R[i, N+1] = u[i]
-    end
+        copy!(r, a)
+        mul!(r, Atr, z_tr, -1.0, 1.0) #r = a - A*z
+        γ = norm(r)
+        work .= 0.0
+        mul!(work_tr, Atr', r) # work := c = A'r
+
+        err = norm(work_tr) / sqrt(anorm2)
+        #verbose && println(" *** Reorthogonalize ",string(i)," . Error:", err)
+        verbose && print("*")
+        i += 1
+
+
+        #if !iszero(β)
+            #γ = sqrt(γ^2 + β2*norm(z)^2 + β2)
+        #end
+    end # while
+    end # if
+
+    axpy!(1, work2_tr, u_tr)
+    view(R,1:N,N+1) .= view(u, 1:N)
     R[N+1,N+1] = γ
+    view(A,:,N+1) .= a
 end
 
 """
@@ -283,37 +291,40 @@ with a column of zeros. This is useful to avoid copying the matrix.
 """
 function qrdelcol!(A::AbstractMatrix{T}, R::AbstractMatrix{T}, k::Integer) where {T}
 
+    # Note that R is n x n
     m, n = size(A)
+    mR,nR = size(R)
     
     # Shift columns. This is apparently faster than copying views.
-    for j in (k+1):n, i in 1:m
-        @inbounds R[i,j-1] = R[i, j]
-        @inbounds A[i,j-1] = A[i, j]
+    @inbounds for j in (k+1):n
+        R[:,j-1] .= @view R[:, j]
+        A[:,j-1] .= @view A[:, j]
     end
-    for i in 1:m
-        @inbounds R[i,n] = zero(T)
-        @inbounds A[i,n] = zero(T)
-    end
+    A[:,n] .= zero(T)
+    R[:,n] .= zero(T)
 
-    for j in k:(n-1)          # Forward sweep to reduce k-th row to zeros
-        @inbounds G, y = givens(R[j+1,j], R[k,j], 1, 2)
-        @inbounds R[j+1,j] = y
+    @inbounds for j in k:(nR-1)          # Forward sweep to reduce k-th row to zeros
+        G, y = givens(R[j+1,j], R[k,j], 1, 2)
+        R[j+1,j] = y
         if j<n && !iszero(G.s)
             for i in j+1:n
-                @inbounds tmp = G.c*R[j+1,i] + G.s*R[k,i]
-                @inbounds R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
-                @inbounds R[j+1,i] = tmp
+                tmp = G.c*R[j+1,i] + G.s*R[k,i]
+                R[k,i] = G.c*R[k,i] - conj(G.s)*R[j+1,i]
+                R[j+1,i] = tmp
             end
         end
     end
+    #end # timeit givens downdate
 
     # Shift k-th row. We skipped the removed column.
-    for j in k:(n-1)
+    @inbounds for j in k:(n-1)
         for i in k:j
-            @inbounds R[i,j] = R[i+1, j]
+            R[i,j] = R[i+1, j]
         end
-        @inbounds R[j+1,j] = zero(T)
+        R[j+1,j] = zero(T)
     end
+    #end # timeit shift row
+    #end #timeit all
 end
 
 """
@@ -345,6 +356,63 @@ function csne(Rin::AbstractMatrix{T}, A::AbstractMatrix{T}, b::Vector{T}) where 
     x += dx
     r = b - A*x
     return (x, r)
+end
+
+function csne!(R::RT, A::AT, b::bT, sol::solT, work::wT, work2::w2T, u::uT,  r::rT, N::Int) where {RT,AT,bT,solT,wT,w2T,uT,rT}
+    #c,u,sol,du are R^n. Only r is R^m
+    #c -> work; du -> work2. dsol is redundant.
+
+    m, n = size(A)
+    @assert size(sol,1) == n
+    @assert size(work,1) == n
+    @assert size(work2,1) == n
+    @assert size(u,1) == n
+    @assert size(r,1) == m
+    if N < n
+        cols = 1:N
+        Atr = view(A, :, cols) #truncated
+        Rtr = view(R, cols, cols)
+        work_tr = view(work, cols)
+        work2_tr = view(work2, cols)
+        u_tr = view(u, cols)
+        sol_tr = view(sol, cols)
+    else
+        Atr = A
+        Rtr = R
+        work_tr = work
+        work2_tr = work2
+        u_tr = u
+        sol_tr = sol
+    end
+    bnorm = norm(b)
+    bnorm2 = bnorm^2
+    # work := c = A'b
+    mul!(work_tr, Atr', b)
+    solveRT!(Rtr, work_tr, u_tr)
+
+    solveR!(Rtr, u_tr, sol_tr) #z = R\u  
+    copy!(r, b)
+    mul!(r, Atr, sol_tr, -1, 1) #r = b - A*z
+    mul!(work_tr, Atr', r) # r := c = A'r
+    err = norm(work_tr) / bnorm
+
+    i = 0
+    while err > ORTHO_TOL && i < ORTHO_MAX_IT
+
+        solveRT!(Rtr, work_tr, work2_tr) # work2 := du = R'\c
+        solveR!(Rtr, work2_tr, work_tr) # work := dz = R\du
+        axpy!(1.0, work_tr, sol_tr) #z  += dz          # Refine z
+
+        copy!(r, b)
+        mul!(r, Atr, sol_tr, -1.0, 1.0) #r = b - A*z
+        mul!(work_tr, Atr', r) # work := c = A'r
+
+        err = norm(work_tr) / bnorm
+        #verbose && println(" *** Reorthogonalize ",string(i), " CSNE. Error:", err)
+        verbose && print("*")
+        i += 1
+
+    end
 end
 
 end # module
